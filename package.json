@@ -1,0 +1,21 @@
+{
+  "name": "sounding-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "author": {"name": "Marc Anderson", "email": "marccand@outlook.com"},
+  "repository": {"type": "git", "url": "git+https://github.com/Marc-C-Anderson/sounding-board.git"},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0-beta.13"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "^8.0.0-beta.13"
+    }
+  }
+}
