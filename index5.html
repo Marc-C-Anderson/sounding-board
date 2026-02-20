@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<body style="background: #111; color: #0f0; font-family: monospace; text-align: center;">
+    <h2>Keyboard String Synth</h2>
+    <p>Use Keys [1] through [9] to play different notes! Click 'Start' first.</p>
+    <canvas id="canvas" width="800" height="200" style="border: 1px solid #333;"></canvas>
+    <div id="fretDisplay" style="font-size: 24px; margin-top: 10px;">Fret: Open</div>
+    <button id="startBtn" style="padding: 10px 20px; margin-top: 20px; cursor: pointer;">Start Audio</button>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const N = 100;
+    
+    let u = new Float32Array(N), u_prev = new Float32Array(N), u_next = new Float32Array(N);
+    let audioCtx, scriptNode, isRunning = false;
+    let currentFret = 0;
+    let currentTension = 0.4;
+
+    function getFretPoint(fret) {
+        if (fret === 0) return 0;
+        const ratio = 1 - (1 / Math.pow(2, fret / 12));
+        return Math.floor(ratio * (N - 5)); 
+    }
+
+    function pluck() {
+        const start = getFretPoint(currentFret);
+        const middle = start + (N - start) / 2;
+        for(let i = start + 1; i < N - 1; i++) {
+            u[i] = (1 - Math.abs(i - middle) / ((N - start) / 2)) * 0.5;
+            u[i] = Math.max(0, u[i]);
+            u_prev[i] = u[i];
+        }
+    }
+
+    function initAudio() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        scriptNode = audioCtx.createScriptProcessor(1024, 0, 1);
+        scriptNode.onaudioprocess = (e) => {
+            const out = e.outputBuffer.getChannelData(0);
+            const activeStart = getFretPoint(currentFret);
+            for (let s = 0; s < out.length; s++) {
+                for (let i = 0; i <= activeStart; i++) u[i] = u_prev[i] = 0; // The "Nut"
+                for (let i = activeStart + 1; i < N - 1; i++) {
+                    u_next[i] = (2 * u[i] - u_prev[i] + currentTension * (u[i+1] - 2*u[i] + u[i-1])) * 0.999;
+                }
+                u_prev.set(u); u.set(u_next);
+                out[s] = u[N - 10]; // Pickup near the bridge
+            }
+        };
+        scriptNode.connect(audioCtx.destination);
+    }
+
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+        const key = parseInt(e.key);
+        if (key >= 0 && key <= 9) {
+            currentFret = key;
+            document.getElementById('fretDisplay').innerText = "Fret: " + (key === 0 ? "Open" : key);
+            pluck();
+        }
+    });
+
+    function draw() {
+        ctx.fillStyle = 'black'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath(); ctx.strokeStyle = '#0f0';
+        for(let i=0; i<N; i++) {
+            ctx.lineTo((i/(N-1))*canvas.width, 100 + u[i]*400);
+        }
+        ctx.stroke();
+        requestAnimationFrame(draw);
+    }
+
+    document.getElementById('startBtn').onclick = () => { if(!isRunning){ initAudio(); isRunning=true; } pluck(); };
+    draw();
+</script>
+</body>
+</html>

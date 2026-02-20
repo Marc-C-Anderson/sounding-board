@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<body style="background: #111; color: #00ffcc; font-family: monospace; text-align: center;">
+    <h2>6-String Polyphonic Synth</h2>
+    <p>Keys [1-6] pluck individual strings. Keys [Q-Y] change frets.</p>
+    <canvas id="canvas" width="800" height="300" style="border: 1px solid #333;"></canvas>
+    <button id="startBtn" style="padding: 15px 30px; margin-top: 20px; cursor: pointer; background: #00ffcc; font-weight: bold;">Power On Guitar</button>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const N = 80;
+    const numStrings = 6;
+    
+    // String Properties (Standard Tuning Tension Ratios)
+    // Lower strings have less tension/higher density simulation
+    const tensions = [0.15, 0.22, 0.30, 0.42, 0.55, 0.75]; 
+    
+    class GuitarString {
+        constructor(tension) {
+            this.u = new Float32Array(N);
+            this.u_prev = new Float32Array(N);
+            this.u_next = new Float32Array(N);
+            this.tension = tension;
+            this.fret = 0;
+            this.damping = 0.9992;
+        }
+
+        pluck() {
+            const start = Math.floor(1 - (1 / Math.pow(2, this.fret / 12)) * (N - 5));
+            const mid = (N + start) / 2;
+            for(let i = start + 1; i < N - 1; i++) {
+                this.u[i] = (1 - Math.abs(i - mid) / ((N - start) / 2)) * 0.4;
+                this.u_prev[i] = this.u[i];
+            }
+        }
+
+        update() {
+            const activeStart = Math.floor((1 - (1 / Math.pow(2, this.fret / 12))) * (N - 5));
+            for (let i = 0; i <= activeStart; i++) { this.u[i] = 0; this.u_prev[i] = 0; }
+            for (let i = activeStart + 1; i < N - 1; i++) {
+                this.u_next[i] = (2 * this.u[i] - this.u_prev[i] + this.tension * (this.u[i+1] - 2*this.u[i] + this.u[i-1])) * this.damping;
+            }
+            this.u_prev.set(this.u);
+            this.u.set(this.u_next);
+            return this.u[N - 8]; // Return "pickup" value
+        }
+    }
+
+    const guitar = tensions.map(t => new GuitarString(t));
+    let audioCtx, isRunning = false;
+
+    function initAudio() {
+        audioCtx = new AudioContext();
+        const node = audioCtx.createScriptProcessor(1024, 0, 1);
+        node.onaudioprocess = (e) => {
+            const out = e.outputBuffer.getChannelData(0);
+            for (let s = 0; s < out.length; s++) {
+                let sum = 0;
+                for (let i = 0; i < numStrings; i++) {
+                    sum += guitar[i].update();
+                }
+                out[s] = sum * 0.5; // Master volume / limiting
+            }
+        };
+        node.connect(audioCtx.destination);
+    }
+
+    // Mapping: Keys 1-6 pluck strings, Q-Y change frets for all strings
+    window.addEventListener('keydown', (e) => {
+        const stringIdx = parseInt(e.key) - 1;
+        if (stringIdx >= 0 && stringIdx < 6) guitar[stringIdx].pluck();
+        
+        const fretMap = {'q':1, 'w':2, 'e':3, 'r':4, 't':5, 'y':6};
+        if (fretMap[e.key]) guitar.forEach(s => s.fret = fretMap[e.key]);
+    });
+
+    function draw() {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        guitar.forEach((s, idx) => {
+            ctx.beginPath();
+            ctx.strokeStyle = `hsl(${idx * 40}, 100%, 50%)`;
+            const rowY = 50 + (idx * 40);
+            for(let i=0; i<N; i++) {
+                ctx.lineTo((i/(N-1))*canvas.width, rowY + s.u[i]*300);
+            }
+            ctx.stroke();
+        });
+        requestAnimationFrame(draw);
+    }
+
+    document.getElementById('startBtn').onclick = () => { if(!isRunning){ initAudio(); isRunning=true; } draw(); };
+</script>
+</body>
+</html>

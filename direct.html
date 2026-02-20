@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<body style="background: #111; color: #0f0; font-family: monospace; text-align: center;">
+    <h2>Physical Modeling String</h2>
+    <canvas id="canvas" width="600" height="200" style="border: 1px solid #333;"></canvas><br>
+    <button id="startBtn" style="padding: 10px 20px; margin-top: 20px; cursor: pointer;">Start Audio & Pluck</button>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const N = 50; // Fewer points = higher pitch (fundamental frequency)
+    
+    // Physics Buffers
+    let u = new Float32Array(N);
+    let u_prev = new Float32Array(N);
+    let u_next = new Float32Array(N);
+    
+    let audioCtx, scriptNode;
+    let isRunning = false;
+
+    // Initialization: Pluck the string initially
+    function pluck() {
+        for(let i = 1; i < N-1; i++) {
+            u[i] = (Math.random() - 0.5) * 0.5; // Initial noise/displacement
+            u_prev[i] = u[i];
+        }
+    }
+
+    function initAudio() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // 4096 buffer size for the audio loop
+        scriptNode = audioCtx.createScriptProcessor(4096, 0, 1);
+
+        scriptNode.onaudioprocess = (audioEvent) => {
+            const output = audioEvent.outputBuffer.getChannelData(0);
+            const tension = 0.5; // Controls pitch stability
+            const damping = 0.999;
+
+            for (let s = 0; s < output.length; s++) {
+                // Physics Update (Finite Difference Step)
+                for (let i = 1; i < N - 1; i++) {
+                    u_next[i] = (2 * u[i] - u_prev[i] + tension * (u[i+1] - 2*u[i] + u[i-1])) * damping;
+                }
+                
+                // Update buffers
+                u_prev.set(u);
+                u.set(u_next);
+
+                // AUDIO OUTPUT: Use the middle of the string as the "pickup"
+                output[s] = u[Math.floor(N/2)]; 
+            }
+        };
+
+        scriptNode.connect(audioCtx.destination);
+    }
+
+    // Visual Loop (Runs at 60fps, separate from audio rate)
+    function draw() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.strokeStyle = '#0f0';
+        
+        for(let i=0; i<N; i++) {
+            const x = (i / (N-1)) * canvas.width;
+            const y = 100 + u[i] * 300; // Scale displacement for visibility
+            if(i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        requestAnimationFrame(draw);
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        if (!isRunning) {
+            initAudio();
+            isRunning = true;
+        }
+        pluck();
+    });
+
+    draw();
+</script>
+</body>
+</html>

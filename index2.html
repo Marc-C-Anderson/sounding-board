@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; }
+        canvas { border: 1px solid #444; cursor: crosshair; background: #000; }
+        .controls { position: absolute; top: 20px; left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="controls">Click and drag to pluck the string!</div>
+    <canvas id="stringCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('stringCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Configuration
+    canvas.width = 800;
+    canvas.height = 400;
+    const N = 100; // Number of points
+    const dx = canvas.width / (N - 1);
+    const dt = 0.1;
+    const c = 2.0; // Wave speed
+    const damping = 0.995; // Energy loss
+
+    // State Arrays
+    let u = new Float32Array(N);     // Current displacement
+    let u_prev = new Float32Array(N); // Previous displacement
+    let u_next = new Float32Array(N); // Next displacement
+
+    // Interaction state
+    let isPlucking = false;
+
+    function update() {
+        if (!isPlucking) {
+            // Apply Wave Equation: u_next = 2u - u_prev + (c*dt/dx)^2 * (u_right - 2u + u_left)
+            const tension = Math.pow((c * dt) / 1, 2); 
+
+            for (let i = 1; i < N - 1; i++) {
+                u_next[i] = 2 * u[i] - u_prev[i] + tension * (u[i + 1] - 2 * u[i] + u[i - 1]);
+                u_next[i] *= damping; // Apply friction
+            }
+
+            // Swap buffers
+            u_prev.set(u);
+            u.set(u_next);
+        }
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 2;
+
+        const centerY = canvas.height / 2;
+
+        for (let i = 0; i < N; i++) {
+            const x = i * dx;
+            const y = centerY + u[i];
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // Interaction Logic
+    canvas.addEventListener('mousedown', () => isPlucking = true);
+    window.addEventListener('mouseup', () => isPlucking = false);
+    canvas.addEventListener('mousemove', (e) => {
+        if (isPlucking) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top - (canvas.height / 2);
+            
+            // Find closest point and create a "pluck" shape
+            const index = Math.floor(mouseX / dx);
+            if (index > 0 && index < N - 1) {
+                u[index] = mouseY;
+                // Smooth out the pluck slightly so it's not a single-pixel spike
+                if (index > 1) u[index-1] = mouseY * 0.5;
+                if (index < N - 2) u[index+1] = mouseY * 0.5;
+                u_prev.set(u); 
+            }
+        }
+    });
+
+    update();
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<body style="background: #111; color: #0f0; font-family: monospace; text-align: center;">
+    <h2>Physical Modeling: Slide String</h2>
+    <canvas id="canvas" width="600" height="200" style="border: 1px solid #333; margin-bottom: 20px;"></canvas><br>
+    
+    <div style="margin-bottom: 20px;">
+        <label>Tension (Pitch): </label>
+        <input type="range" id="tensionSlider" min="0.05" max="0.9" step="0.01" value="0.5">
+        <span id="tensionVal">0.50</span>
+    </div>
+
+    <button id="startBtn" style="padding: 10px 20px; cursor: pointer;">Initialize & Pluck</button>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const tensionSlider = document.getElementById('tensionSlider');
+    const tensionVal = document.getElementById('tensionVal');
+    
+    const N = 60; 
+    let u = new Float32Array(N);
+    let u_prev = new Float32Array(N);
+    let u_next = new Float32Array(N);
+    
+    let audioCtx, scriptNode;
+    let isRunning = false;
+    let currentTension = 0.5;
+
+    function pluck() {
+        for(let i = 1; i < N-1; i++) {
+            // Triangular pluck shape
+            u[i] = (i < N/2) ? i/(N/2) : (N-i)/(N/2);
+            u[i] *= 0.5; 
+            u_prev.set(u);
+        }
+    }
+
+    function initAudio() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        scriptNode = audioCtx.createScriptProcessor(2048, 0, 1);
+
+        scriptNode.onaudioprocess = (audioEvent) => {
+            const output = audioEvent.outputBuffer.getChannelData(0);
+            const damping = 0.9995;
+
+            for (let s = 0; s < output.length; s++) {
+                for (let i = 1; i < N - 1; i++) {
+                    // Discrete wave equation with dynamic tension
+                    u_next[i] = (2 * u[i] - u_prev[i] + currentTension * (u[i+1] - 2*u[i] + u[i-1])) * damping;
+                }
+                u_prev.set(u);
+                u.set(u_next);
+                output[s] = u[Math.floor(N/2)]; 
+            }
+        };
+        scriptNode.connect(audioCtx.destination);
+    }
+
+    // Update tension from slider
+    tensionSlider.addEventListener('input', (e) => {
+        currentTension = parseFloat(e.target.value);
+        tensionVal.innerText = currentTension.toFixed(2);
+    });
+
+    function draw() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 2;
+        
+        for(let i=0; i<N; i++) {
+            const x = (i / (N-1)) * canvas.width;
+            const y = 100 + u[i] * 300;
+            if(i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        requestAnimationFrame(draw);
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        if (!isRunning) {
+            initAudio();
+            isRunning = true;
+        }
+        pluck();
+    });
+
+    draw();
+</script>
+</body>
+</html>
