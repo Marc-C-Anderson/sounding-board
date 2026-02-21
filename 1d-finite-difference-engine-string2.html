@@ -32,7 +32,7 @@
     <nav>
         <a href="index.html">Index</a>
     </nav>
-    <div class="controls">Click and drag to pluck the string!</div>
+    <div class="controls">Click and drag to pluck the entire string!</div>
     <canvas id="stringCanvas"></canvas>
 
     <script>
@@ -100,15 +100,20 @@
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top - (canvas.height / 2);
 
-                // Find closest point and create a "pluck" shape
-                const index = Math.floor(mouseX / dx);
-                if (index > 0 && index < N - 1) {
-                    u[index] = mouseY;
-                    // Smooth out the pluck slightly so it's not a single-pixel spike
-                    if (index > 1) u[index - 1] = mouseY * 0.5;
-                    if (index < N - 2) u[index + 1] = mouseY * 0.5;
-                    u_prev.set(u);
+                const peakIndex = Math.floor(mouseX / dx);
+
+                for (let i = 0; i < N; i++) {
+                    if (i <= peakIndex) {
+                        // Linear ramp from left wall (0) to mouse
+                        u[i] = (i / peakIndex) * mouseY;
+                    } else {
+                        // Linear ramp from mouse to right wall (N-1)
+                        u[i] = (1 - (i - peakIndex) / (N - 1 - peakIndex)) * mouseY;
+                    }
                 }
+
+                // Sync u_prev so the string starts from "rest" at this new shape
+                u_prev.set(u);
             }
         });
 
