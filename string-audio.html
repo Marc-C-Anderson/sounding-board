@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <h1>Karplus-Strong Synthesis</h1>
+    <canvas id="stringCanvas" style="background: #111; cursor: crosshair;"></canvas>
+    <p style="color: #ccc; font-family: sans-serif;">Click and drag to pluck the string.</p>
+
+    <script>
+        const canvas = document.getElementById('stringCanvas');
+        const ctx = canvas.getContext('2d');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        canvas.width = 800;
+        canvas.height = 400;
+
+        // --- Physics Constants ---
+        const damping = 0.985; // Sound decay
+        const visualDamping = 0.98; // How fast the string stops moving
+        const tension = 0.15; // Speed of wave propagation
+        const numPoints = 100;
+
+        // Arrays for the wave simulation
+        let points = new Array(numPoints).fill(0);
+        let velocities = new Array(numPoints).fill(0);
+
+        // --- Audio Logic ---
+        function playPluck(positionX) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // Frequency mapping: 110Hz (A2) to 440Hz (A4)
+            const freq = 110 + (positionX / canvas.width) * 330;
+            const sampleRate = audioCtx.sampleRate;
+            const period = Math.floor(sampleRate / freq);
+
+            const buffer = audioCtx.createBuffer(1, sampleRate * 2, sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // 1. Noise Burst (The Pluck)
+            for (let i = 0; i < period; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            // 2. Feedback Loop (Karplus-Strong)
+            for (let i = period; i < data.length; i++) {
+                data[i] = (data[i - period] + data[i - (period - 1)]) * 0.5 * damping;
+            }
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            const gainNode = audioCtx.createGain();
+
+            gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
+
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            source.start();
+        }
+
+        // --- Visual Loop (Wave Physics) ---
+        function updatePhysics() {
+            for (let i = 1; i < numPoints - 1; i++) {
+                // Simple wave equation: acceleration depends on neighbors
+                const force = tension * (points[i - 1] + points[i + 1] - 2 * points[i]);
+                velocities[i] += force;
+                velocities[i] *= visualDamping;
+            }
+
+            for (let i = 0; i < numPoints; i++) {
+                points[i] += velocities[i];
+            }
+        }
+
+        function draw() {
+            updatePhysics();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the string
+            ctx.beginPath();
+            ctx.strokeStyle = '#00ffcc';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.moveTo(0, 200);
+            for (let i = 0; i < numPoints; i++) {
+                const x = (i / (numPoints - 1)) * canvas.width;
+                const y = 200 + points[i];
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            requestAnimationFrame(draw);
+        }
+
+        // --- Interaction ---
+        canvas.addEventListener('mousedown', (e) => {
+            const idx = Math.floor((e.offsetX / canvas.width) * numPoints);
+            // Displace the string visually
+            points[idx] = e.offsetY - 200;
+            // Give it a velocity boost for more "snap"
+            velocities[idx] = (e.offsetY - 200) * 0.5;
+
+            playPluck(e.offsetX);
+        });
+
+        // Optional: Drag to pluck
+        canvas.addEventListener('mousemove', (e) => {
+            if (e.buttons === 1) { // If mouse is held down
+                const idx = Math.floor((e.offsetX / canvas.width) * numPoints);
+                points[idx] = e.offsetY - 200;
+            }
+        });
+
+        draw();
+
+    </script>
+</body>
+
+</html>

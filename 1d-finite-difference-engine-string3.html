@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: white;
+            font-family: sans-serif;
+        }
+
+        canvas {
+            border: 1px solid #444;
+            cursor: crosshair;
+            background: #000;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav>
+        <a href="index.html">Index</a>
+    </nav>
+    <div class="controls">Click and drag to pluck the entire string!</div>
+    <canvas id="stringCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('stringCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Configuration
+        canvas.width = 800;
+        canvas.height = 400;
+        const N = 100; // Number of points
+        const dx = canvas.width / (N - 1);
+        const dt = 0.1;
+        const c = 2.0; // Wave speed
+        const damping = 0.995; // Energy loss
+
+        // State Arrays
+        let u = new Float32Array(N);     // Current displacement
+        let u_prev = new Float32Array(N); // Previous displacement
+        let u_next = new Float32Array(N); // Next displacement
+
+        // Interaction state
+        let isPlucking = false;
+
+        function update() {
+            if (!isPlucking) {
+                // Apply Wave Equation: u_next = 2u - u_prev + (c*dt/dx)^2 * (u_right - 2u + u_left)
+                const tension = Math.pow((c * dt) / 1, 2);
+
+                for (let i = 1; i < N - 1; i++) {
+                    u_next[i] = 2 * u[i] - u_prev[i] + tension * (u[i + 1] - 2 * u[i] + u[i - 1]);
+                    u_next[i] *= damping; // Apply friction
+                }
+
+                // Swap buffers
+                u_prev.set(u);
+                u.set(u_next);
+            }
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function draw() {
+            // 1. Create a "motion blur" effect by not clearing fully
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerY = canvas.height / 2;
+
+            for (let i = 0; i < N - 1; i++) {
+                const x1 = i * dx;
+                const x2 = (i + 1) * dx;
+                const y1 = centerY + u[i];
+                const y2 = centerY + u[i + 1];
+
+                // 2. Color based on velocity (energy)
+                const velocity = Math.abs(u[i] - u_prev[i]) * 100;
+                ctx.strokeStyle = `rgb(${50 + velocity}, 255, ${200 - velocity})`;
+
+                ctx.lineWidth = 2 + (velocity / 10); // String gets thicker where it moves fast
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+        // Interaction Logic
+        canvas.addEventListener('mousedown', () => isPlucking = true);
+        window.addEventListener('mouseup', () => isPlucking = false);
+        canvas.addEventListener('mousemove', (e) => {
+            if (isPlucking) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top - (canvas.height / 2);
+
+                const peakIndex = Math.floor(mouseX / dx);
+
+                for (let i = 0; i < N; i++) {
+                    if (i <= peakIndex) {
+                        // Linear ramp from left wall (0) to mouse
+                        u[i] = (i / peakIndex) * mouseY;
+                    } else {
+                        // Linear ramp from mouse to right wall (N-1)
+                        u[i] = (1 - (i - peakIndex) / (N - 1 - peakIndex)) * mouseY;
+                    }
+                }
+
+                // Sync u_prev so the string starts from "rest" at this new shape
+                u_prev.set(u);
+            }
+        });
+
+        update();
+    </script>
+</body>
+
+</html>
