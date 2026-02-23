@@ -6,23 +6,13 @@
         <a href="index.html">Index</a>
     </nav>
     <h1>1D Finite Difference Time Domain Simulation</h1>
-    <canvas id="stringCanvas" style="background: #111; cursor: crosshair;"></canvas>
     <p style="color: #ccc; font-family: sans-serif;">Click and drag to pluck the string.</p>
 
     <script>
-        const canvas = document.getElementById('stringCanvas');
-        const ctx = canvas.getContext('2d');
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        canvas.width = 800;
-        canvas.height = 400;
-
-        let isPlucking = false;
-
         // --- Audio Physics Setup ---
         const sampleRate = audioCtx.sampleRate;
         const stringLength = 100;
-
         // Global buffers for Audio FDTD to prevent re-allocation
         const audioPrev = new Float32Array(stringLength);
         const audioCurr = new Float32Array(stringLength);
@@ -30,23 +20,19 @@
 
         function playFDTDPluck(normalizedX) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-
             const duration = 1.5;
             const buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
             const output = buffer.getChannelData(0);
-
             // Reset Audio State
             audioPrev.fill(0);
             audioCurr.fill(0);
             audioNext.fill(0);
-
             // 1. Initial State (Triangle Pluck)
             const pluckIdx = Math.max(1, Math.min(stringLength - 2, Math.floor(normalizedX * stringLength)));
             for (let i = 0; i < stringLength; i++) {
                 if (i < pluckIdx) audioCurr[i] = i / pluckIdx;
                 else audioCurr[i] = (stringLength - i) / (stringLength - pluckIdx);
             }
-
             // 2. Simulation Constants
             const lambdaSq = 0.4; // Stability (must be < 1)
             const damping = 0.99995; // Audio sustain
@@ -60,83 +46,18 @@
                 audioPrev.set(audioCurr);
                 audioCurr.set(audioNext);
             }
-
             // 4. Playback
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
             const gainNode = audioCtx.createGain();
             gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
             source.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             source.start();
         }
-
-        // --- Visual Physics Setup ---
-        let current = new Array(stringLength).fill(0);
-        let previous = new Array(stringLength).fill(0);
-        let next = new Array(stringLength).fill(0);
-
-        const tension = 0.15;
-        const visualDamping = 0.98;
-
-        function updatePhysics() {
-            for (let i = 1; i < current.length - 1; i++) {
-                const acceleration = tension * (current[i + 1] - 2 * current[i] + current[i - 1]);
-                next[i] = (2 * current[i] - previous[i] + acceleration) * visualDamping;
-            }
-            previous = [...current];
-            current = [...next];
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            updatePhysics();
-
-            ctx.beginPath();
-            ctx.strokeStyle = '#00ffcc';
-            ctx.lineWidth = 3;
-            for (let i = 0; i < current.length; i++) {
-                const x = (i / (current.length - 1)) * canvas.width;
-                const y = 200 + current[i];
-                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-            requestAnimationFrame(draw);
-        }
-
-        // --- Interaction ---
-        canvas.addEventListener('mousedown', (e) => {
-            isPlucking = true;
-            const normX = e.offsetX / canvas.width;
-
-            // Trigger Audio
-            playFDTDPluck(normX);
-
-            // Trigger Visuals
-            const pluckIdx = Math.floor(normX * current.length);
-            const strength = e.offsetY - 200;
-
-            for (let i = 0; i < current.length; i++) {
-                let val = (i < pluckIdx) ? (i / pluckIdx) : ((current.length - i) / (current.length - pluckIdx));
-                current[i] = val * strength;
-                previous[i] = val * strength;
-            }
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (isPlucking) {
-                const idx = Math.floor((e.offsetX / canvas.width) * current.length);
-                // Limit index to keep boundaries fixed
-                if (idx > 0 && idx < current.length - 1) {
-                    current[idx] = e.offsetY - 200;
-                }
-            }
-        });
-
-        window.addEventListener('mouseup', () => isPlucking = false);
-        draw();
+        const normX = 0.2;
+        playFDTDPluck(normX);
     </script>
 </body>
 
